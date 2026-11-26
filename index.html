@@ -593,6 +593,10 @@ body.print-thermal .chit-row b{font-size:11px}
       </form>
       <div class="auth-note">
         This system stores clinical front-desk records in your clinic's Supabase project. Access is restricted by role and protected with row level security.
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span id="loginConnState" class="tiny" style="color:var(--muted)">Checking database...</span>
+          <span class="tiny" style="color:#b6bdc9">Build v${APP.version}</span>
+        </div>
       </div>
       <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-sm" id="connBtn" type="button">Connection settings</button>
@@ -666,7 +670,7 @@ body.print-thermal .chit-row b{font-size:11px}
 <div class="toasts" id="toasts"></div>
 <div id="printArea"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="clinicdesk-config.js"></script>
 <script>
@@ -676,7 +680,7 @@ body.print-thermal .chit-row b{font-size:11px}
    ============================================================ */
 'use strict';
 
-const APP = { name: 'ClinicDesk', version: '1.0.0', schema: '2026.11' };
+const APP = { name: 'ClinicDesk', version: '1.0.1', schema: '2026.11' };
 
 /* Deployment connection. Fill these two values to ship a preconfigured build:
    staff then never see a connection prompt. Leave blank to use the endpoint
@@ -959,7 +963,12 @@ function savePrefs() { localStorage.setItem(PREF_KEY, JSON.stringify(S.prefs)); 
 
 function initClient() {
   const ext = window.CLINIC_CONFIG;
-  const external = (ext && /^https?:\/\//.test(ext.url || '') && String(ext.key || '').length > 20 && !/your-|placeholder/i.test(ext.key)) ? ext : null;
+  const extKey = String((ext && ext.key) || '');
+  const external = (ext
+    && /^https?:\/\//.test(ext.url || '')
+    && extKey.length > 20
+    && !/PASTE_|PLACEHOLDER|YOUR_|CHANGE_ME/i.test(extKey)
+    && !/YOUR-PROJECT/i.test(ext.url)) ? ext : null;
   const cfg = (REMOTE_CONFIG.url && REMOTE_CONFIG.key) ? REMOTE_CONFIG : (external || loadCfg());
   if (!cfg || !cfg.url || !cfg.key) return false;
   if ((REMOTE_CONFIG.url && REMOTE_CONFIG.key) || external) saveCfg(cfg);
@@ -1011,7 +1020,7 @@ async function boot() {
     const { data, error } = await S.sb.auth.getSession();
     if (error) throw error;
     S.session = data.session;
-    if (!S.session) { showAuth(); return; }
+    if (!S.session) { showAuth(); checkHealth(true); return; }
     await finishLogin();
   } catch (e) {
     showAuth('Could not reach Supabase. Check the connection settings and try again.');
@@ -1117,29 +1126,44 @@ async function checkHealth(quiet = false) {
   if (S.checking) return;
   S.checking = true;
   const t0 = performance.now();
-  let ok = false; let rt = false;
+  let ok = false;
   try {
-    const res = await Promise.race([
-      S.sb.from('doctors').select('id', { head: true, count: 'exact' }).limit(1),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
-    ]);
-    if (res && !res.error) ok = true;
-    else if (res && res.error) {
-      if (/relation|does not exist/i.test(res.error.message)) ok = true; // reachable, schema pending
-      else ok = false;
+    // Auth settings validates both the endpoint and the public key, and unlike a
+    // table query it does not depend on row level security, so it works before
+    // sign-in and on a freshly created project.
+    const base = String(S.cfg.url || '').replace(/\/+$/, '');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(base + '/auth/v1/settings', {
+      headers: { apikey: S.cfg.key },
+      cache: 'no-store',
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    ok = res.ok;
+    if (!ok) {
+      let detail = '';
+      try {
+        const j = await res.json();
+        detail = j.message || j.msg || j.error_description || j.error || '';
+      } catch (e) { /* non-JSON error body */ }
+      S.lastError = `HTTP ${res.status}${detail ? ': ' + detail : ''}`;
+    } else {
+      S.lastError = '';
     }
-  } catch { ok = false; }
+  } catch (e) {
+    ok = false;
+    S.lastError = (e && e.name === 'AbortError') ? 'Request timed out after 8 seconds' : 'Network unreachable from this device';
+  }
   S.latency = ok ? Math.round(performance.now() - t0) : null;
   if (ok) { S.lastOk = new Date().toISOString(); S.lastSync = S.lastOk; }
-  rt = !!S.realtime;
-  setHealth(ok, S.latency, rt);
+  setHealth(ok, S.latency, !!S.realtime);
   S.checking = false;
   if (!quiet) {
-    if (ok) toast('Connection restored', 'Supabase database is reachable. Data has been reconciled.', 'ok');
-    else toast('Connection lost', 'Supabase is unreachable. Destructive actions are blocked.', 'err');
+    if (ok) toast('Connection verified', 'The database endpoint and public key are valid.', 'ok');
+    else toast('Connection failed', S.lastError || 'Supabase did not respond.', 'err', 7000);
   }
 }
-
 function setHealth(online, latency, realtime) {
   const changed = S.online !== online;
   S.online = online;
@@ -1157,6 +1181,13 @@ function setHealth(online, latency, realtime) {
   if ($('#dbMiniSub')) $('#dbMiniSub').textContent = online
     ? (S.lastOk ? `Synced ${fmtTime(S.lastOk)}` : 'Connected')
     : (S.lastOk ? `Last online ${fmtTime(S.lastOk)}` : 'No connection');
+  const loginState = $('#loginConnState');
+  if (loginState) {
+    loginState.textContent = online
+      ? `Database online${latency != null ? ' \u00b7 ' + latency + ' ms' : ''}`
+      : (S.lastError && S.lastError !== 'Network unreachable from this device' ? 'Database offline \u00b7 ' + S.lastError : 'Database offline');
+    loginState.style.color = online ? 'var(--ok)' : 'var(--bad)';
+  }
   const badge = $('#rtBadge');
   if (badge) {
     badge.className = 'badge ' + (realtime ? 'badge-ok' : 'badge-warn');
@@ -3463,15 +3494,21 @@ function renderSettingsPage() {
 /* ---------------- connection panel ---------------- */
 function openConnectionPanel() {
   const cfg = S.cfg || {};
+  const rtLabel = S.session ? (S.realtime ? 'Connected' : 'Disconnected') : 'Starts after sign-in';
+  const rtColor = S.session ? (S.realtime ? 'var(--ok)' : 'var(--warn)') : 'var(--muted)';
   const body = `
     <div class="summary-grid" style="grid-template-columns:1fr 1fr">
       <div class="sm"><span>Database</span><b style="font-size:13px;color:${S.online ? 'var(--ok)' : 'var(--bad)'}">${S.online ? 'Online' : 'Offline'}</b></div>
-      <div class="sm"><span>Realtime</span><b style="font-size:13px;color:${S.realtime ? 'var(--ok)' : 'var(--warn)'}">${S.realtime ? 'Connected' : 'Disconnected'}</b></div>
+      <div class="sm"><span>Realtime</span><b style="font-size:13px;color:${rtColor}">${esc(rtLabel)}</b></div>
       <div class="sm"><span>Latency</span><b class="mono" style="font-size:13px">${S.latency != null ? S.latency + ' ms' : '--'}</b></div>
       <div class="sm"><span>Last successful check</span><b style="font-size:13px">${S.lastOk ? esc(fmtTime(S.lastOk)) : '--'}</b></div>
     </div>
-    <div class="note" style="margin-top:12px">Project: <b>${esc((cfg.url || '').replace('https://', ''))}</b><br>Authenticated as ${esc(S.session?.user?.email || 'staff')}.</div>
-    <div class="note ${S.online ? '' : 'danger'}" style="margin-top:10px">${S.online ? 'Writes are enabled. Assignments, imports and queue changes are committed to Supabase.' : 'Writes are blocked. Nothing will be reported as saved while the database is unreachable.'}</div>
+    <div class="note" style="margin-top:12px">Project: <b>${esc((cfg.url || '').replace('https://', ''))}</b><br>${S.session ? 'Signed in as ' + esc(S.session.user.email || 'staff') + '.' : 'Not signed in yet. Use the staff account created in Supabase Authentication.'}</div>
+    <div class="note ${S.online ? '' : 'danger'}" style="margin-top:10px">${S.online
+      ? (S.session ? 'Writes are enabled. Assignments, imports and queue changes are committed to Supabase.' : 'Connection verified. Sign in to start using the front desk.')
+      : 'The database could not be reached with this endpoint and key. Nothing will be reported as saved.'}
+      ${!S.online && S.lastError ? `<div class="tiny" style="margin-top:6px;opacity:.85">Reason: ${esc(S.lastError)}</div>` : ''}
+    </div>
     <div class="field" style="margin-top:14px"><label>Connection endpoint</label><input class="input" id="connUrl" value="${esc(cfg.url || '')}" placeholder="https://project.supabase.co"></div>
     <div class="field" style="margin-top:10px"><label>Public anon key</label><input class="input" id="connKey" type="password" value="${esc(cfg.key || '')}" placeholder="Public key"></div>
     <div class="note warn" style="margin-top:10px">Changing the connection reloads the application and signs you out of the current session.</div>`;
