@@ -11,5 +11,5 @@
    ============================================================================ */
 window.CLINIC_CONFIG = {
   url: 'https://nuerkhavcjlhosyyoxrm.supabase.co',
-  key: 'PASTE_YOUR_ANON_PUBLIC_KEY_HERE'
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51ZXJraGF2Y2psaG9zeXlveHJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2ODUyODYsImV4cCI6MjExMTI2MTI4Nn0.Mx2F4ILtQhPj-xcsAiGWqaOvrHqjoMAs_0Dq6YRbnkg'
 };
