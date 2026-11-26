@@ -1682,7 +1682,7 @@ async function renderDashboard(silent = false) {
           </div>
         </div>
 
-        <div class="card">
+                <div class="card">
           <div class="card-head"><div><h3>Doctor Availability</h3><p>Live room and queue status</p></div>
             <a class="btn btn-sm btn-ghost" href="#/doctors">${icon('arrowRight')}</a>
           </div>
@@ -1694,7 +1694,14 @@ async function renderDashboard(silent = false) {
                 <div class="txt"><b>${esc(d.name)}</b><span>${esc(d.specialty || 'General')}${d.room ? ' &middot; ' + esc(d.room) : ''}</span></div>
                 <span class="badge ${meta.cls}" style="height:20px;font-size:10px"><span class="dot"></span>${esc(meta.label)}</span>
                 <span class="num mono">${fmtNum(d.queue_count || 0)}</span>
-              </div>    <div class="section-head" style="margin:26px 0 14px">
+              </div>`;
+            }).join('') || `<div class="empty" style="padding:18px">${icon('doctor')}<div class="small">No active doctors yet</div></div>`}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin:26px 0 14px">
       <div><h2>Population insights</h2><p>Rank distribution, lifestyle risk factors and medical history across all registered officers</p></div>
       <a class="btn btn-sm" href="#/reports">View reports ${icon('arrowRight')}</a>
     </div>
@@ -1709,8 +1716,7 @@ async function renderDashboard(silent = false) {
               <div class="rank-track"><i style="width:${Math.max(4, Math.round(Number(r.count || 0) / rankMax * 100))}%"></i></div>
               <b>${fmtNum(r.count)}</b>
               <em>${rankTotal ? Math.round(Number(r.count || 0) / rankTotal * 100) : 0}%</em>
-            </div>`).join('')
-            : `<div class="empty" style="padding:24px 8px">${icon('users')}<div class="small">No rank data yet. Import registrations to populate this chart.</div></div>`}
+            </div>`).join('') : `<div class="empty" style="padding:24px 8px">${icon('users')}<div class="small">No rank data yet. Import registrations to populate this chart.</div></div>`}
           ${ranks.length > 6 ? `<div class="tiny muted" style="margin-top:8px">+ ${ranks.length - 6} more rank${ranks.length - 6 === 1 ? '' : 's'} in the registry</div>` : ''}
         </div>
       </div>
@@ -1719,14 +1725,8 @@ async function renderDashboard(silent = false) {
         <div class="card-head"><div><h3>Lifestyle Risk Factors</h3><p>Smoking and alcohol exposure</p></div></div>
         <div class="pad" style="padding-top:8px">
           <div class="life-grid">
-            <div class="life-cell">
-              <div class="donut-host" id="smokingDonut"></div>
-              <div class="life-cap"><b>Smoking</b><span>${fmtNum(smoke.risk)} of ${fmtNum(smokeKnown)} recorded</span></div>
-            </div>
-            <div class="life-cell">
-              <div class="donut-host" id="alcoholDonut"></div>
-              <div class="life-cap"><b>Alcohol</b><span>${fmtNum(alco.risk)} of ${fmtNum(alcoKnown)} recorded</span></div>
-            </div>
+            <div class="life-cell"><div class="donut-host" id="smokingDonut"></div><div class="life-cap"><b>Smoking</b><span>${fmtNum(smoke.risk)} of ${fmtNum(smokeKnown)} recorded</span></div></div>
+            <div class="life-cell"><div class="donut-host" id="alcoholDonut"></div><div class="life-cap"><b>Alcohol</b><span>${fmtNum(alco.risk)} of ${fmtNum(alcoKnown)} recorded</span></div></div>
           </div>
           <div class="life-legend">
             <span><i style="background:#e0453b"></i>At risk</span>
@@ -1751,14 +1751,6 @@ async function renderDashboard(silent = false) {
               <div class="hb"><span>Diagnosed</span><div class="tr"><i style="width:${dp}%;background:${c.color}"></i></div><b>${dp}%</b></div>
               <div class="hb"><span>On medication</span><div class="tr"><i style="width:${tp}%;background:#0fa968"></i></div><b>${tp}%</b></div>
             </div>`;
-            }).join('') || `<div class="empty" style="padding:18px">${icon('doctor')}<div class="small">No active doctors yet</div></div>`}
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-`;
           }).join('') : `<div class="empty" style="padding:24px 8px">${icon('clipboard')}<div class="small">No medical history answers recorded yet. Import the screening form to populate this chart.</div></div>`}
           ${conditions.some((c) => Number(c.data.total || 0) > 0) ? '<div class="tiny muted" style="margin-top:10px">Percentages use officers with a recorded answer.</div>' : ''}
         </div>
@@ -4530,6 +4522,8 @@ function buildSummaryHTML(m) {
   return `<div class="report" id="summaryReportRoot">
     <div class="rhead">
       <div class="rtitle">MOBILE MEDICAL CLINIC REPORT</div>
+      <div class="rtitle-si">ජංගම වෛද්‍ය සායන වාර්තාව</div>
+      <div class="rtitle-ta">நடமாடும் மருத்துவமனை அறிக்கை</div>
       <div class="rclinic">${esc(m.clinic)}</div>
       <div class="rmeta">Generated ${esc(fmtDate(localDate(m.generatedAt)))} ${esc(fmtTime(m.generatedAt))} by ${esc(m.generatedBy)} &nbsp;|&nbsp; Participants: <b>${fmtNum(total)}</b> &nbsp;|&nbsp; Police stations: <b>${m.stations.length}</b> &nbsp;|&nbsp; Period: ${esc(m.period)}</div>
     </div>
@@ -4584,10 +4578,6 @@ function buildSummaryHTML(m) {
       ${note('Figures show officers recorded as currently on treatment. Dispensed quantities are not captured by the form.')}
     </section>
 
-    <section class="rsec"><h2>Participant Register</h2>
-      ${table(registerHead, registerRows, 'register')}
-    </section>
-
     <div class="rfoot">ClinicDesk Pro &nbsp;|&nbsp; ${esc(m.clinic)} &nbsp;|&nbsp; ${esc(fmtDate(localDate(m.generatedAt)))}</div>
   </div>`;
 }
@@ -4597,6 +4587,8 @@ const SUMMARY_HTML_CSS = `
   .report{width:794px;background:#fff;color:#101828;font-family:'Noto Sans Sinhala','Noto Sans Tamil','Iskoola Pota','Nirmala UI','Inter',sans-serif;font-size:9px;line-height:1.35;padding:0}
   .rhead{text-align:center;border-bottom:2px solid #4c4fe0;padding-bottom:6px;margin-bottom:8px}
   .rtitle{font-size:19px;font-weight:800;letter-spacing:.04em;color:#20242e}
+  .rtitle-si{font-size:13px;font-weight:700;color:#20242e;margin-top:1px}
+  .rtitle-ta{font-size:11px;font-weight:600;color:#20242e;margin-top:1px}
   .rclinic{font-size:12px;font-weight:700;color:#4c4fe0;margin-top:2px}
   .rmeta{font-size:8px;color:#667085;margin-top:3px;line-height:1.5}
   .rsec{margin-bottom:8px}
@@ -4717,7 +4709,7 @@ async function renderReportsPage(silent = false) {
 
     <div class="card" style="margin-bottom:18px">
       <div class="card-head">
-        <div><h3>Summary report</h3><p>Complete registry report: participation by station and rank, lifestyle risk factors, medical history, screening findings and every participant.</p></div>
+        <div><h3>Summary report</h3><p>Template-based report: participation by station and rank, screening findings, medical history and medications. Excel adds every participant record and form answer.</p></div>
         <span class="badge badge-brand" id="summaryCount">${fmtNum(patientCount)} participant${patientCount === 1 ? '' : 's'}</span>
       </div>
       <div class="pad" style="padding-top:12px">
@@ -4725,9 +4717,9 @@ async function renderReportsPage(silent = false) {
           <button class="btn btn-primary" data-summary="pdf">${icon('file')} Download PDF</button>
           <button class="btn" data-summary="docx">${icon('file')} Download Word</button>
           <button class="btn" data-summary="xlsx">${icon('download')} Download Excel</button>
-          <span class="small muted" id="summaryStatus">Includes all participant records and screening answers.</span>
+          <span class="small muted" id="summaryStatus">PDF and Word follow the paper template; Excel includes every participant and form answer.</span>
         </div>
-        <div class="tiny muted" style="margin-top:10px">PDF, Word and Excel reports follow the mobile clinic report structure. Sections the screening form does not capture, such as referrals and medication dispensing, are not included.</div>
+        <div class="tiny muted" style="margin-top:10px">Sections the screening form does not capture (urine, dental, referrals, transfers, dispensed quantities) are marked not captured. Sinhala and Tamil display correctly in the PDF.</div>
       </div>
     </div>
 
