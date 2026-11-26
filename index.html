@@ -596,7 +596,6 @@ body.print-thermal .chit-row b{font-size:11px}
       </div>
       <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-sm" id="connBtn" type="button">Connection settings</button>
-        <button class="btn btn-sm btn-ghost" id="setupLink" type="button">First-time setup</button>
       </div>
     </div>
   </main>
@@ -669,6 +668,7 @@ body.print-thermal .chit-row b{font-size:11px}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="clinicdesk-config.js"></script>
 <script>
 /* ============================================================
    ClinicDesk - Clinical Front Desk & Doctor Assignment System
@@ -677,6 +677,12 @@ body.print-thermal .chit-row b{font-size:11px}
 'use strict';
 
 const APP = { name: 'ClinicDesk', version: '1.0.0', schema: '2026.11' };
+
+/* Deployment connection. Fill these two values to ship a preconfigured build:
+   staff then never see a connection prompt. Leave blank to use the endpoint
+   saved in this browser through "Connection settings".
+   Use the PUBLIC anon key only — never a service-role key. */
+const REMOTE_CONFIG = { url: '', key: '' };
 const CFG_KEY = 'clinicdesk.connection.v1';
 const PREF_KEY = 'clinicdesk.prefs.v1';
 const PAGE_SIZE = 20;
@@ -952,8 +958,11 @@ function loadPrefs() {
 function savePrefs() { localStorage.setItem(PREF_KEY, JSON.stringify(S.prefs)); }
 
 function initClient() {
-  const cfg = loadCfg();
+  const ext = window.CLINIC_CONFIG;
+  const external = (ext && /^https?:\/\//.test(ext.url || '') && String(ext.key || '').length > 20 && !/your-|placeholder/i.test(ext.key)) ? ext : null;
+  const cfg = (REMOTE_CONFIG.url && REMOTE_CONFIG.key) ? REMOTE_CONFIG : (external || loadCfg());
   if (!cfg || !cfg.url || !cfg.key) return false;
+  if ((REMOTE_CONFIG.url && REMOTE_CONFIG.key) || external) saveCfg(cfg);
   S.cfg = cfg;
   try {
     S.sb = supabase.createClient(cfg.url, cfg.key, {
@@ -3500,7 +3509,6 @@ function bindGlobalEvents() {
     login($('#loginEmail').value, $('#loginPassword').value);
   };
   $('#connBtn').onclick = openConnectionPanel;
-  $('#setupLink').onclick = () => showSetup();
   $('#forgotBtn').onclick = () => {
     toast('Password assistance', 'Ask your clinic administrator to reset the account in Supabase Authentication.', 'info', 6000);
   };
